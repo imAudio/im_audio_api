@@ -2,11 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DeliveryNote;
+use App\Models\DeliveryNoteDevice;
 use App\Models\Device;
+use App\Models\DeviceState;
+use App\Models\DeviceTransfer;
 use App\Models\SetSail;
 use App\Services\IdUserService;
 use App\Services\PermissionService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DeviceController extends Controller
 {
@@ -59,43 +65,61 @@ class DeviceController extends Controller
         }
     }
 
-    public function getByState($state, $idAudioCenter, $idManufactured, $contentModele)
+    public function getByStateAudioCenter($state, $idAudioCenter)
     {
         try {
             $permissions = $this->permissionService->getPermissions();
 
             if ($permissions["isWorker"] == true) {
-                $query = Device::where("id_audio_center", $idAudioCenter)
-                    ->where("state", $state);
 
-                if ($idManufactured != 0) {
-                    $query->whereHas('deviceModel', function ($query) use ($idManufactured) {
-                        $query->where('id_device_manufactured', $idManufactured);
-                    });
-                }
+                // Sous-requête pour les derniers états des appareils
+                $stateSubQuery = DB::table('device_state as ds1')
+                    ->select('ds1.id_device', DB::raw('MAX(ds1.created_at) as latest_created_at'))
+                    ->groupBy('ds1.id_device');
 
-                if (!empty($contentModele)) {
-                    $query->whereHas('deviceModel', function ($query) use ($contentModele) {
-                        $query->where('content', 'LIKE', '%' . $contentModele . '%');
-                    }); 
-                }
+                // Sous-requête pour les derniers transferts des appareils
+                $transferSubQuery = DB::table('device_transfer as dt1')
+                    ->select('dt1.id_device', DB::raw('MAX(dt1.created_at) as latest_created_at'))
+                    ->groupBy('dt1.id_device');
 
-                $devices = $query->with(['deviceModel' => function ($query) use ($idManufactured) {
-                    if ($idManufactured != 0) {
-                        $query->where('id_device_manufactured', $idManufactured);
-                    }
-                }])->get();
+                // Requête principale
+                $devices = Device::leftJoinSub($stateSubQuery, 'latest_state', function ($join) {
+                    $join->on('device.id_device', '=', 'latest_state.id_device');
+                })
+                    ->leftJoin('device_state as ds2', function ($join) use ($state) {
+                        $join->on('device.id_device', '=', 'ds2.id_device')
+                            ->on('ds2.created_at', '=', 'latest_state.latest_created_at')
+                            ->where('ds2.state', '=', $state);
+                    })
+                    ->leftJoinSub($transferSubQuery, 'latest_transfer', function ($join) {
+                        $join->on('device.id_device', '=', 'latest_transfer.id_device');
+                    })
+                    ->leftJoin('device_transfer as dt2', function ($join) use ($idAudioCenter) {
+                        $join->on('device.id_device', '=', 'dt2.id_device')
+                            ->on('dt2.created_at', '=', 'latest_transfer.latest_created_at')
+                            ->where('dt2.id_audio_center', '=', $idAudioCenter);
+                    })
+                    ->whereNotNull('ds2.id_device')
+                    ->whereNotNull('dt2.id_device')
+                    ->with(['deviceState', 'deviceTransfer'])
+                    ->select('device.*', 'ds2.state as latest_state', 'ds2.created_at as latest_state_created_at', 'dt2.id_audio_center as latest_transfer_audio_center', 'dt2.created_at as latest_transfer_created_at')
+
+                    ->orderBy('ds2.created_at', 'desc')
+
+                    ->get();
+
 
                 $data = $devices->map(function ($device) {
                     return [
                         "id_device" => $device->id_device,
                         "serial_number" => $device->serial_number,
-                        "sav_date" => $device->sav_date,
+                        "state" => $device->deviceState->first()->state,
+                        "date_state" => $device->deviceState->first()->created_at,
                         "model" => [
                             "id_device_model" => $device->deviceModel->id_device_model,
                             "content" => $device->deviceModel->content,
                         ],
-                       "type" => [
+                        "type" => [
                             "id_device_type" => $device->deviceModel->deviceType->id_device_type,
                             "content" => $device->deviceModel->deviceType->content,
                         ],
@@ -103,6 +127,7 @@ class DeviceController extends Controller
                             "id_device_manufactured" => $device->deviceModel->deviceManufactured->id_device_manufactured,
                             "content" => $device->deviceModel->deviceManufactured->content,
                         ],
+
                     ];
                 });
 
@@ -113,21 +138,181 @@ class DeviceController extends Controller
             return response()->json(["message" => "You do not have the rights"], 401);
 
         } catch (\Exception $exception) {
-            return response()->json($exception);
+            Log::error('Error in getByStateAudioCenter:', ['exception' => $exception]);
+            return response()->json(["error" => $exception->getMessage()], 500);
         }
     }
 
 
-
-    public function create()
+    public function create(Request $request)
     {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
 
+                $devices = $request->devices;
+                $createdDevices = [];
+
+                $id_worker = $this->idUserService->getAuthenticatedIdUser()['id_user'];
+
+                $deliveryNote = DeliveryNote::create([
+                    "name" => $request->name,
+                    "number_device" => $request->number_device,
+                    "id_audio_center" => $request->id_audio_center,
+                    "id_worker" => $id_worker,
+                ]);
+
+                foreach ($devices as $device) {
+
+                    $device['id_worker'] = $id_worker;
+
+                    $createdDevice = Device::create($device);
+                    $createdDevices[] = $createdDevice;
+
+                    DeviceState::create([
+                        "id_device" => $createdDevice->id_device,
+                        "state" => "Stock",
+                        "id_worker" =>  $createdDevice->id_worker,
+                    ]);
+
+                    DeviceTransfer::create([
+                        "id_device" => $createdDevice->id_device,
+                        "id_audio_center" => $device["id_audio_center"],
+                        "id_worker" =>  $createdDevice->id_worker,
+                    ]);
+
+                    DeliveryNoteDevice::create([
+                        "id_delivery_note" => $deliveryNote->id_delivery_note,
+                        "id_device" => $createdDevice->id_device,
+                        "id_worker" => $id_worker
+                    ]);
+                }
+
+                return response()->json(["message" => "Devices created successfully", "devices" => $createdDevices], 201);
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
     }
 
-    public function show($id)
+    public function getHistoryState($id_device)
     {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
 
+                $data = DeviceState::where("id_device",$id_device)->get();
+                return response()->json($data);
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
     }
+
+    public function getHistoryTransfer($id_device)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
+
+                $data = DeviceTransfer::where("id_device",$id_device)->get();
+                return response()->json($data);
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
+    }
+
+
+    public function show($id_device)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+                $stateSubQuery = DB::table('device_state as ds1')
+                    ->select('ds1.id_device', DB::raw('MAX(ds1.created_at) as latest_created_at'))
+                    ->where('ds1.id_device', $id_device)
+                    ->groupBy('ds1.id_device');
+
+                $transferSubQuery = DB::table('device_transfer as dt1')
+                    ->select('dt1.id_device', DB::raw('MAX(dt1.created_at) as latest_created_at'))
+                    ->where('dt1.id_device', $id_device)
+                    ->groupBy('dt1.id_device');
+
+                $device = Device::joinSub($stateSubQuery, 'latest_state', function ($join) {
+                    $join->on('device.id_device', '=', 'latest_state.id_device');
+                })
+                    ->join('device_state as ds2', function ($join) {
+                        $join->on('device.id_device', '=', 'ds2.id_device')
+                            ->on('ds2.created_at', '=', 'latest_state.latest_created_at');
+                    })
+                    ->joinSub($transferSubQuery, 'latest_transfer', function ($join) {
+                        $join->on('device.id_device', '=', 'latest_transfer.id_device');
+                    })
+                    ->join('device_transfer as dt2', function ($join) {
+                        $join->on('device.id_device', '=', 'dt2.id_device')
+                            ->on('dt2.created_at', '=', 'latest_transfer.latest_created_at');
+                    })
+                    ->with([
+                        'deviceState' => function($query) {
+                            $query->orderByDesc('created_at')->limit(1);
+                        },
+                        'deviceTransfer' => function($query) {
+                            $query->orderByDesc('created_at')->limit(1);
+                        },
+                        'deviceModel.deviceType',
+                        'deviceModel.deviceManufactured'
+                    ])
+                    ->where('device.id_device', $id_device)
+                    ->first();
+
+                if ($device) {
+                    $data = [
+                        "id_device" => $device->id_device,
+                        "serial_number" => $device->serial_number,
+                        "state" => $device->deviceState->first()->state ?? null,
+                        "date_state" => $device->deviceState->first()->created_at ?? null,
+                        "model" => [
+                            "id_device_model" => $device->deviceModel->id_device_model,
+                            "content" => $device->deviceModel->content,
+                        ],
+                        "type" => [
+                            "id_device_type" => $device->deviceModel->deviceType->id_device_type,
+                            "content" => $device->deviceModel->deviceType->content,
+                        ],
+                        "manufactured" => [
+                            "id_device_manufactured" => $device->deviceModel->deviceManufactured->id_device_manufactured,
+                            "content" => $device->deviceModel->deviceManufactured->content,
+                        ],
+                        "latest_transfer" => [
+                            "id_audio_center" => $device->deviceTransfer->first()->id_audio_center ?? null,
+                            "date_transfer" => $device->deviceTransfer->first()->created_at ?? null,
+                        ]
+                    ];
+
+                    return response()->json($data);
+                } else {
+                    return response()->json(["message" => "Device not found"], 404);
+                }
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["message" => $exception->getMessage()], 500);
+        }
+    }
+
 
     public function update(Request $request, $id)
     {
@@ -137,5 +322,54 @@ class DeviceController extends Controller
     public function destroy($id)
     {
 
+    }
+
+    public function editState(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+
+                $devices = $request->all();
+
+                foreach ($devices as $device) {
+                    $device['id_worker'] = $this->idUserService->getAuthenticatedIdUser()['id_user'];
+                    DeviceState::create($device);
+                }
+
+                return response()->json(["message" => "Devices edit state successfully"]);
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
+    }
+
+    public function transfer(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+
+                $devices = $request->all();
+
+                foreach ($devices as $device) {
+                    $device['id_worker'] = $this->idUserService->getAuthenticatedIdUser()['id_user'];
+
+                    DeviceTransfer::create($device);
+                }
+
+                return response()->json(["message" => "Devices edit transfer successfully"]);
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
     }
 }

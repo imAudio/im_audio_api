@@ -53,7 +53,8 @@ class PatientController extends Controller
                     'social_security_number' => $request->socialSecurity,
                     'date_birth' => $request->date,
                 ]);
-                return response()->json(["message" => "Patien create"],201);
+
+                return response()->json(["message" =>   "Patien create","id_user" => $user->id_user],201);
             }else{
                 return response()->json(["message" => "You do not have the rights"],401);
             }

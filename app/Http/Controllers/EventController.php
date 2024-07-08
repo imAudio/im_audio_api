@@ -181,12 +181,17 @@ class EventController extends Controller
                         'start' => $event->start,
                         'end' => $event->end,
                         'description' => $event->description,
-                        'backgroundColor' => $event->eventType->background_color, // Changement background_color -> backgroundColor pour être en accord avec fullCalendar
-                        'title' => $event->eventType->content, // Pour être en accord avec full calendar
-                        'state' => $event->state
+                        'backgroundColor' => $event->eventType->background_color,
+                        'title' => $event->eventType->content,
+                        'state' => $event->state,
+                        'user' => [
+                            'id_user' => $event->id_user ?? null,
+                            'lastname' => $event->user->lastname ?? null,
+                            'firstname' => $event->user->firstname ?? null
+                        ] ?? null
                     ];
                 });
-
+             
                 return response()->json($data);
             }
             return response()->json(["message" => "You do not have the rights"],401);

@@ -60,7 +60,6 @@ class ToDoListController extends Controller
                 $toDoLists = ToDoList::where('id_audio_center',$id_audio_center)
                     ->where("is_deleted",0)
                     ->get();
-
                 $data = $toDoLists->map(function ($toDoList){
                     $creat = $toDoList->created_at->format('d/m/Y');
                     return [
@@ -78,13 +77,8 @@ class ToDoListController extends Controller
                             'lastName' => $toDoList->user->lastname ?: null,
                         ] : null,
                         'creat' => $creat,
-
-
                     ];
                 });
-
-
-
                 return response()->json($data);
             }
             return response()->json(["message" => "You do not have the rights"], 401);
@@ -92,7 +86,6 @@ class ToDoListController extends Controller
             error_log('Exception during creation: ' . $exception->getMessage());
             throw $exception;
         }
-
     }
     public function show($id)
     {

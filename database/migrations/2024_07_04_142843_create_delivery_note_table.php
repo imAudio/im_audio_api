@@ -11,20 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('device', function (Blueprint $table) {
-            $table->id('id_device');
-            $table->string('serial_number');
-
-            $table->unsignedBigInteger('id_device_color');
-            $table->foreign('id_device_color')->references('id_device_color')->on('device_color');
+        Schema::create("delivery_note", function (Blueprint $table) {
+            $table->id("id_delivery_note");
+            $table->string("name");
+            $table->integer("number_device");
+            $table->unsignedBigInteger('id_audio_center');
+            $table->foreign('id_audio_center')->references('id_audio_center')->on('audio_center');
 
             $table->unsignedBigInteger('id_worker');
             $table->foreign('id_worker')->references('id_user')->on('worker');
-
-            $table->string('device_content');
-            $table->foreign('device_content')->references('content')->on('device_modele');
-
-
             $table->timestamps();
         });
     }
@@ -34,6 +29,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('device');
+        Schema::dropIfExists("delivery_note");
     }
 };

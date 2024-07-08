@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DeviceType;
+use App\Models\DeliveryNote;
 use App\Services\IdUserService;
 use App\Services\PermissionService;
 use Exception;
 use Illuminate\Http\Request;
 
-class DeviceTypeController extends Controller
+class DeliveryNoteController extends Controller
 {
     protected $permissionService;
     protected $idUserService;
@@ -17,15 +17,17 @@ class DeviceTypeController extends Controller
         $this->idUserService = $idUserService;
         $this->permissionService = $permissionService;
     }
-    public function index()
-    {
+
+    public function getByAudioCenter($id_audio_center){
         try {
             $permissions = $this->permissionService->getPermissions();
             if($permissions["isWorker"] == true){
 
-                $deviceType = DeviceType::get();
+                $deliveryNote = DeliveryNote::where("id_audio_center",$id_audio_center)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
 
-                return response()->json($deviceType);
+                return response()->json($deliveryNote);
             }else{
                 return response()->json(["message" => "You do not have the rights"],401);
             }
@@ -33,38 +35,5 @@ class DeviceTypeController extends Controller
         }catch (Exception $exception){
             return response()->json($exception,500);
         }
-    }
-
-
-    public function create()
-    {
-        //
-    }
-
-
-    public function store(Request $request)
-    {
-        //
-    }
-
-    public function show($id)
-    {
-        //
-    }
-
-    public function edit($id)
-    {
-        //
-    }
-
-
-    public function update(Request $request, $id)
-    {
-        //
-    }
-
-    public function destroy($id)
-    {
-        //
     }
 }
