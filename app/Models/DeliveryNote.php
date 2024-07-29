@@ -33,4 +33,9 @@ class DeliveryNote extends Model
     {
         return $this->belongsTo(Worker::class, 'id_worker');
     }
+
+    public function deviceManufactured()
+    {
+        return $this->belongsTo(DeviceManufactured::class, 'id_device_manufactured');
+    }
 }

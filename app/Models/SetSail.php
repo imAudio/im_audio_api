@@ -10,10 +10,8 @@ class SetSail extends Model
     protected $table = 'set_sail';
 
 
-
-
     protected $fillable = [
-        'size_earpiece','id_worker','id_device','id_device_dome','id_patient'
+        'size_earpiece','id_worker','id_device','id_device_dome','id_patient','side'
     ];
 
     public function worker()

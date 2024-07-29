@@ -2,18 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Mcq;
+use App\Services\IdUserService;
+use App\Services\PermissionService;
 use Illuminate\Http\Request;
 
 class McqController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
+    protected $idUserService;
+    protected $permissionService;
+    public function __construct(IdUserService $idUserService,PermissionService $permissionService)
+    {
+        $this->idUserService = $idUserService;
+        $this->permissionService = $permissionService;
+    }
     public function index()
     {
-        //
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if($permissions["isWorker"] == true) {
+
+                $data = Mcq::get();
+
+                return response()->json($data);
+            }
+        } catch (\Exception $e) {
+            error_log('Exception during creation: ' . $e->getMessage());
+            throw $e;
+        }
     }
 
     /**

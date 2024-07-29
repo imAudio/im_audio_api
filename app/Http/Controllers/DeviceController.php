@@ -114,7 +114,7 @@ class DeviceController extends Controller
                         "id_device" => $device->id_device,
                         "serial_number" => $device->serial_number,
                         "state" => $device->deviceState->first()->state,
-                        "date_state" => $device->deviceState->first()->created_at,
+                        "date_state" => $device->deviceState->first()->created_at->toDateString(),
                         "model" => [
                             "id_device_model" => $device->deviceModel->id_device_model,
                             "content" => $device->deviceModel->content,
@@ -204,12 +204,22 @@ class DeviceController extends Controller
             $permissions = $this->permissionService->getPermissions();
             if ($permissions["isWorker"] == true) {
 
-                $data = DeviceState::where("id_device",$id_device)->get();
+                $historyState = DeviceState::where("id_device",$id_device)->get();
+
+                $data = $historyState->map(function ($state){
+                    $creat = $state->created_at->format('d/m/Y');
+                    return [
+                        "state" => $state->state,
+                        "worker" => [
+                            "firstName" => $state->worker !== null ? $state->worker->firstname : null,
+                            "lastName" => $state->worker !== null ? $state->worker->lastname : null,
+                        ],
+                        "created_at" => $creat
+                    ];
+                });
                 return response()->json($data);
             }
-
             return response()->json(["message" => "You do not have the rights"], 401);
-
         } catch (\Exception $exception) {
             return response()->json(["error" => $exception->getMessage()], 500);
         }
@@ -221,7 +231,19 @@ class DeviceController extends Controller
             $permissions = $this->permissionService->getPermissions();
             if ($permissions["isWorker"] == true) {
 
-                $data = DeviceTransfer::where("id_device",$id_device)->get();
+                $historyTransfer = DeviceTransfer::where("id_device",$id_device)->get();
+
+                $data = $historyTransfer->map(function ($transfer){
+                    $creat = $transfer->created_at->format('d/m/Y');
+                    return [
+                        "audio_center" => $transfer->audioCenter->name,
+                        "worker" => [
+                            "firstName" => $transfer->worker !== null ? $transfer->worker->firstname : null,
+                            "lastName" => $transfer->worker !== null ? $transfer->worker->lastname : null,
+                        ],
+                        "created_at" => $creat
+                    ];
+                });
                 return response()->json($data);
             }
 
@@ -312,11 +334,78 @@ class DeviceController extends Controller
             return response()->json(["message" => $exception->getMessage()], 500);
         }
     }
-
-
-    public function update(Request $request, $id)
+    public function getStateDevice($id_device)
     {
+        $stateSubQuery = DB::table('device_state as ds1')
+            ->select('ds1.id_device', DB::raw('MAX(ds1.created_at) as latest_created_at'))
+            ->where('ds1.id_device', $id_device)
+            ->groupBy('ds1.id_device');
 
+        $transferSubQuery = DB::table('device_transfer as dt1')
+            ->select('dt1.id_device', DB::raw('MAX(dt1.created_at) as latest_created_at'))
+            ->where('dt1.id_device', $id_device)
+            ->groupBy('dt1.id_device');
+
+        $device = Device::joinSub($stateSubQuery, 'latest_state', function ($join) {
+            $join->on('device.id_device', '=', 'latest_state.id_device');
+        })
+            ->join('device_state as ds2', function ($join) {
+                $join->on('device.id_device', '=', 'ds2.id_device')
+                    ->on('ds2.created_at', '=', 'latest_state.latest_created_at');
+            })
+            ->joinSub($transferSubQuery, 'latest_transfer', function ($join) {
+                $join->on('device.id_device', '=', 'latest_transfer.id_device');
+            })
+            ->join('device_transfer as dt2', function ($join) {
+                $join->on('device.id_device', '=', 'dt2.id_device')
+                    ->on('dt2.created_at', '=', 'latest_transfer.latest_created_at');
+            })
+            ->with([
+                'deviceState' => function($query) {
+                    $query->orderByDesc('created_at')->limit(1);
+                },
+                'deviceTransfer' => function($query) {
+                    $query->orderByDesc('created_at')->limit(1);
+                },
+                'deviceModel.deviceType',
+                'deviceModel.deviceManufactured'
+            ])
+            ->where('device.id_device', $id_device)
+            ->first();
+
+        if ($device) {
+            $state = $device->deviceState->first()->state;
+        }
+
+        return $state;
+    }
+
+    public function update(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
+
+
+                $device = Device::find($request->id_device);
+
+                if (!$device) {
+                    return response()->json(["message" => "Device not found"], 404);
+                }
+
+                $device->update([
+                    'serial_number' => $request->serial_number,
+                    'id_device_color' => $request->id_device_color,
+                    'id_device_model' => $request->id_device_model,
+                    'id_worker' => $this->idUserService->getAuthenticatedIdUser()['id_user'],
+                ]);
+
+                return response()->json(["message" => "Device updated"], 200);
+            }
+            return response()->json(["message" => "You do not have the rights"], 401);
+        } catch (\Exception $exception) {
+            return response()->json(['error' => $exception->getMessage()], 500);
+        }
     }
 
     public function destroy($id)
@@ -370,6 +459,81 @@ class DeviceController extends Controller
 
         } catch (\Exception $exception) {
             return response()->json(["error" => $exception->getMessage()], 500);
+        }
+    }
+
+    public function autocomplete($query, $id_audio_center, $type)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+
+                // Sous-requête pour obtenir le dernier état de chaque appareil
+                $stateSubQuery = DB::table('device_state as ds1')
+                    ->select('ds1.id_device', DB::raw('MAX(ds1.created_at) as latest_created_at'))
+                    ->groupBy('ds1.id_device');
+
+                // Sous-requête pour obtenir le dernier transfert de chaque appareil
+                $transferSubQuery = DB::table('device_transfer as dt1')
+                    ->select('dt1.id_device', DB::raw('MAX(dt1.created_at) as latest_created_at'))
+                    ->groupBy('dt1.id_device');
+
+                // Requête principale pour joindre les appareils avec leur dernier état et transfert
+                $devicesQuery = Device::joinSub($stateSubQuery, 'latest_state', function ($join) {
+                    $join->on('device.id_device', '=', 'latest_state.id_device');
+                })
+                    ->join('device_state as ds2', function ($join) {
+                        $join->on('device.id_device', '=', 'ds2.id_device')
+                            ->on('ds2.created_at', '=', 'latest_state.latest_created_at');
+                    })
+                    ->joinSub($transferSubQuery, 'latest_transfer', function ($join) {
+                        $join->on('device.id_device', '=', 'latest_transfer.id_device');
+                    })
+                    ->join('device_transfer as dt2', function ($join) use ($id_audio_center) {
+                        $join->on('device.id_device', '=', 'dt2.id_device')
+                            ->on('dt2.created_at', '=', 'latest_transfer.latest_created_at')
+                            ->where('dt2.id_audio_center', '=', $id_audio_center); // Filtrer par id_audio_center
+                    })
+                    ->where('ds2.state', 'Stock') // Filtrer par le dernier état "Stock"
+                    ->where('device.serial_number', 'LIKE', '%' . $query . '%');
+
+                // Ajouter conditionnellement la relation deviceModel.deviceType pour filtrer les résultats
+                if ($type == 1) {
+                    $devicesQuery = $devicesQuery->whereHas('deviceModel.deviceType', function ($query) {
+                        $query->where('id_device_type', 1);
+                    });
+                } else {
+                    $devicesQuery = $devicesQuery->whereHas('deviceModel.deviceType', function ($query) {
+                        $query->where('id_device_type', '!=', 1);
+                    });
+                }
+
+                // Charger les relations avec `with`
+                $devicesQuery = $devicesQuery->with([
+                    'deviceState' => function ($query) {
+                        $query->orderByDesc('created_at')->limit(1);
+                    },
+                    'deviceModel.deviceManufactured'
+                ]);
+
+                $devices = $devicesQuery->get();
+         
+
+                $formattedDevices = $devices->map(function ($device) {
+                    return [
+                        'label' => $device->serial_number . " " . $device->deviceModel->content,
+                        'value' => $device->id_device,
+                    ];
+                });
+
+                return response()->json($formattedDevices);
+            } else {
+                return response()->json(["message" => "You do not have the rights"], 401);
+            }
+
+        } catch (Exception $exception) {
+            return response()->json($exception);
         }
     }
 }

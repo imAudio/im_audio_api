@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\CodeResetMail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\JWTAuth;
 use App\Models\User;
@@ -38,25 +40,34 @@ class AuthController extends Controller
     {
         try {
             $this->validate($request, [
-                'email' => 'required',
+                'email' => 'required|email',
             ]);
 
-            $user = User::where("email",$request->email)->first();
 
-            if(!$user){
-                return response()->json(["message" => "user not found"],200);
+
+            if(User::where("email", $request->email)->first()){
+                $user = User::where("email", $request->email)->first();
+            }else{
+                return response()->json(["message" => "user not found"], 404);
             }
-            $date = date('Y-m-d h:i:s');
-            $code_time = strtotime(date("Y-m-d h:i:s", strtotime($date)) . " +15 minutes");
-            $user->code_reset =  Hash::make(generateRandomCode());
 
-            $user->code_time =  Carbon::parse($code_time) ;
+            $code_reset = generateRandomCode();
+            $user->code_reset = Hash::make($code_reset);
+            $user->code_time = Carbon::now()->addMinutes(15);
 
             $user->save();
-            dd($user);
 
-        }catch (\Exception $exception){
-            return response()->json($exception,500);
+            $data = [
+                'message' => $code_reset,
+            ];
+
+
+            Mail::to($request->email)->send(new CodeResetMail($data));
+
+            return response()->json([],204);
+
+        } catch (\Exception $exception) {
+            return response()->json(['error' => $exception->getMessage()], 500);
         }
     }
 
@@ -79,7 +90,7 @@ class AuthController extends Controller
             }
 
             if (Hash::check($request->code_reset, $user->code_reset)) {
-                return response()->json(["message" => "ok"], 202);
+                return response()->json(["message" => "ok"], 204);
             }
 
             return response()->json(["message" => "code invalid"], 400);
@@ -88,6 +99,29 @@ class AuthController extends Controller
             return response()->json($exception,500);
         }
     }
+
+    public function newPassword(Request $request)
+    {
+        try {
+            $this->validate($request, [
+                'email' => 'required',
+                'password' => 'required',
+            ]);
+
+            $user = User::where("email",$request->email)->first();
+
+            if(!$user){
+                return response()->json(["message" => "user not found"],200);
+            }
+            $user->password = Hash::make($request->password);
+            $user->save();
+            return response()->json([], 204);
+
+        }catch (\Exception $exception){
+            return response()->json($exception,500);
+        }
+    }
+
 }
 function generateRandomCode($length = 8) {
     $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()';

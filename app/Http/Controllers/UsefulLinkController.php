@@ -78,4 +78,55 @@ class UsefulLinkController extends Controller
 
         }
     }
+
+    public function update(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
+                $this->validate($request, [
+                    "wording" => "required",
+                    "link" => "required",
+                ]);
+
+                $usefulLink = UsefulLink::find($request->id_useful_link);
+
+                if (!$usefulLink) {
+                    return response()->json(["message" => "Useful Link not found"], 404);
+                }
+
+                $usefulLink->update([
+                    "wording" => $request->wording,
+                    "link" => $request->link,
+                    "id_worker" => $this->idUserService->getAuthenticatedIdUser()["id_user"],
+                ]);
+
+                return response()->json(["message" => "Useful Link updated"], 200);
+            }
+            return response()->json(["message" => "You do not have the rights"], 401);
+        } catch (\Exception $exception) {
+            return response()->json(['error' => $exception->getMessage()], 500);
+        }
+    }
+
+    public function show($id_useful_link)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
+
+                $usefulLink = UsefulLink::find($id_useful_link);
+
+                if (!$usefulLink) {
+                    return response()->json(["message" => "Useful Link not found"], 404);
+                }
+
+
+                return response()->json($usefulLink, 200);
+            }
+            return response()->json(["message" => "You do not have the rights"], 401);
+        } catch (\Exception $exception) {
+            return response()->json(['error' => $exception->getMessage()], 500);
+        }
+    }
 }

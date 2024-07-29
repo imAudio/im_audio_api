@@ -26,12 +26,12 @@ class PatientNoteController extends Controller
             if($permissions["isWorker"] == true){
 
                 $this->validate($request, [
-                    'content' => 'required',
+                    'information' => 'required',
                     'id_patient' => 'required',
                 ]);
 
                 $note = PatientNote::create([
-                    'content' => $request->content,
+                    'content' => $request->information,
                     'id_patient' => $request->id_patient,
                     'id_worker' => $this->idUserService->getAuthenticatedIdUser()['id_user'],
                 ]);
@@ -82,9 +82,10 @@ class PatientNoteController extends Controller
 
                         $patientNotes[] = [
                             'id_patient_note' => $note->id_patient_note,
-                            'content' => $note->content,
+                            'content' => nl2br($note->content),
                             'creat' => $creat,
                             'worker' => [
+                                'id_worker' =>  $note->worker->id_user,
                                 'firstName' => $note->worker->user->firstname,
                                 'lastName' => $note->worker->user->lastname
                             ]

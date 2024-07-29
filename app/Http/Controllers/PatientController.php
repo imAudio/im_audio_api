@@ -5,20 +5,24 @@ namespace App\Http\Controllers;
 use App\Models\Patient;
 use App\Models\User;
 use App\Services\IdUserService;
+use App\Http\Controllers\DeviceController;
 use Illuminate\Http\Request;
 use App\Services\PermissionService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use mysql_xdevapi\Exception;
 use function Laravel\Prompts\error;
+
 
 class PatientController extends Controller
 {
     protected $permissionService;
     protected $idUserService;
-    public function __construct(IdUserService $idUserService,PermissionService $permissionService)
+    public function __construct(IdUserService $idUserService,PermissionService $permissionService, DeviceController $deviceController)
     {
         $this->idUserService = $idUserService;
         $this->permissionService = $permissionService;
+        $this->deviceController = $deviceController;
     }
 
     public function create(Request $request)
@@ -82,7 +86,9 @@ class PatientController extends Controller
                     'setSail.dome',
                     'setSail.patient',
                     'setSail.device',
-                    'attributMcq',
+                    'attributMcq' => function ($query) {
+                        $query->orderBy('created_at', 'desc');
+                    },
                     'attributMcq.mcq',
                     'attributMcq.worker',
 
@@ -93,19 +99,30 @@ class PatientController extends Controller
                 }
 
                 $creat = $patientData->created_at->format('d/m/Y');
+                if($patientData->date_birth !== null){
+                    $patientBirthDate = Carbon::parse($patientData->date_birth);
+                    $currentDate = Carbon::now();
+                    $age = $currentDate->diffInYears($patientBirthDate);
+                }else{
+                    $age = null;
+                }
+
+
 
                 $patient = [
-                    'lastname' => $patientData->user->lastname,
-                    'firstname' => $patientData->user->firstname,
+                    'lastName' => $patientData->user->lastname,
+                    'firstName' => $patientData->user->firstname,
                     'email' => $patientData->user->email,
                     'phone' => $patientData->phone,
                     'address' => $patientData->address,
                     'city' => $patientData->city,
                     'postalCode' => $patientData->postal_code,
+                    'date_birth' => $patientData->date_birth,
+                    'age' => $age,
                     'creat' => $creat,
                     'worker' => [
-                        'firstname' => $patientData->user->worker->firstname,
-                        'lastname' => $patientData->user->worker->lastname,
+                        'firstName' => $patientData->user->worker->firstname,
+                        'lastName' => $patientData->user->worker->lastname,
                     ]
                 ];
 
@@ -130,9 +147,10 @@ class PatientController extends Controller
                     $creat = $note->created_at->format('d/m/Y');
                     return [
                         'id_patient_note' => $note->id_patient_note,
-                        'content' => $note->content,
+                        'content' => nl2br($note->content),
                         'creat' => $creat,
                         'worker' => [
+                            'id_worker' =>  $note->worker->id_user,
                             'firstName' => $note->worker->user->firstname,
                             'lastName' => $note->worker->user->lastname,
                         ]
@@ -140,9 +158,15 @@ class PatientController extends Controller
                     ];
                 });
 
-                $device = $patientData->setSail->map(function ($device) {
-                    return [
+                $leftDevice = [];
+                $rightDevice = [];
+                $otherDevice = [];
+
+                foreach($patientData->setSail as $device){
+
+                    $newDevice = [
                         'sizeEarpiece' => $device->size_earpiece,
+                        'side' => $device->side,
                         'worker' => [
                             'firstName' => $device->worker !== null ? $device->worker->firstname : null,
                             'lastName' => $device->worker !== null ? $device->worker->lastname : null,
@@ -152,28 +176,51 @@ class PatientController extends Controller
                             'state' => $device->dome !== null ? $device->dome->state : null,
                         ],
                         'device' => [
+                            'id_device' => $device->device->id_device,
                             'serialNumber' => $device->device !== null ? $device->device->serial_number : null,
-                            'state' => $device->device !== null ? $device->device->state : null,
+                            'state' => $this->deviceController->getStateDevice($device->device->id_device),
                         ],
                         'model' => [
-                            'type' => $device->device->deviceModel->deviceType->content,//
+                            'type' => $device->device->deviceModel->deviceType->content,
                             'content' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->content : null,
                             'state' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->energy : null,
                             'batteryType' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->battery_type : null,
                             'batteryTypeBackgroundColor' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->battery_type_background_color : null,
-                        ]
+                        ],
+                        'info_model' => [
+                            'manufactured' => $device->device->deviceModel->deviceManufactured->content,
+                            'color' => $device->device->deviceColor->content,
+                        ],
+                        'created_at' => $device->created_at
                     ];
-                });
+
+                    if ($device->side == "left"){
+                        $leftDevice[] = $newDevice;
+                    }else if ($device->side == "right"){
+                        $rightDevice[] =  $newDevice;
+                    }else{
+                        $otherDevice[] =  $newDevice;
+                    }
+                }
+
+                $device = [
+                    "left" => $leftDevice,
+                    "right" => $rightDevice,
+                    "other" => $otherDevice,
+                ];
+
 
                 $mcq = $patientData->attributMcq->map(function ($mcq){
                     $creat = $mcq->created_at->format('d/m/Y');
                     return [
+                        'id_mcq' => $mcq->id_mcq,
                         'state' => $mcq->state,
                         'worker' => [
                             'firstName' => $mcq->worker->user->firstname,
                             'lastName' => $mcq->worker->user->lastname,
                         ],
                         'creat' => $creat,
+                        'created_at' => $mcq->created_at,
                         'mcq' => [
                             'content' => $mcq->mcq->content,
                             'type' => $mcq->mcq->type,
@@ -212,6 +259,7 @@ class PatientController extends Controller
 
     public function autocomplete($query)
     {
+
         try {
             $permissions = $this->permissionService->getPermissions();
 
@@ -238,14 +286,14 @@ class PatientController extends Controller
                 return response()->json(["message" => "You do not have the rights"],401);
             }
 
-
-
             return response()->json($formattedPatients);
         }catch (Exception $exception){
             return response()->json($exception);
         }
 
     }
+
+
 }
 function generateRandomPassword($length = 8) {
     $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()';

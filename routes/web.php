@@ -26,6 +26,7 @@ Route::group([
     Route::post('login', 'AuthController@authenticate');
     Route::post('creat-send-code-password', 'AuthController@creatSendCodePassword');
     Route::post('check-code', 'AuthController@checkCode');
+    Route::post('new-password', 'AuthController@newPassword');
 });
 
 
@@ -67,6 +68,7 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::post('new', 'ToDoListController@create');
         Route::get('by-audio-center/{id_audio_center}','ToDoListController@getByAudioCenter');
         Route::patch('make/{id_to_do_list}','ToDoListController@make');
+        Route::put('put','ToDoListController@update');
     });
 
     Route::group([
@@ -79,10 +81,17 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     Route::group([
         'prefix' => 'user-document'
     ],function ($router){
-        Route::post('upload', 'UserDocumentController@create');
+
         Route::get('download/{id_document}', 'UserDocumentController@download');
         Route::get('get-by-user/{id_user}','UserDocumentController@getDocumentByUser');
+        Route::get('quote/search/{query}/{id_user}','UserDocumentController@searchQuote');
+        Route::get('quote/check/{id_user}','UserDocumentController@checkQuote');
+        Route::get('quote-affiliate/check/{id_user}','UserDocumentController@checkQuoteAffiliate');
+        Route::get('prescription/check/{id_user}','UserDocumentController@checkPrescription');
+        Route::post('quote','UserDocumentController@generateQuote');
+        Route::post('upload', 'UserDocumentController@create');
         Route::delete('delete','UserDocumentController@delete');
+
     });
 
     Route::group([
@@ -93,17 +102,27 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::get('history-transfer/{id_device}', 'DeviceController@getHistoryTransfer');
         Route::get('by-state/set-sail/{state}/{idAudioCenter}', 'DeviceController@getSetSailByState');
         Route::get('by-state-audio-center/{state}/{idAudioCenter}', 'DeviceController@getByStateAudioCenter');
+        Route::get('autocomplete/{query}/{id_audio_center}/{type}','DeviceController@autocomplete');
         Route::post('new', 'DeviceController@create');
         Route::patch('edit/state', 'DeviceController@editState');
         Route::patch('edit/transfer', 'DeviceController@transfer');
+        Route::put('put','DeviceController@update');
+    });
+
+    Route::group([
+       'prefix' => 'set-sail'
+    ],function ($router){
+        Route::post('new','SetSailController@create');
     });
 
     Route::group([
         'prefix' => 'useful-link'
         ], function ($router) {
         Route::get('/', 'UsefulLinkController@getByUser');
+        Route::get('{id_useful_link}', 'UsefulLinkController@show');
         Route::post('new', 'UsefulLinkController@create');
         Route::delete('delete','UsefulLinkController@delete');
+        Route::put('put','UsefulLinkController@update');
     });
 
     Route::group([
@@ -136,15 +155,30 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::get('/','DeviceModelController@index');
         Route::get('by-manufactured/{id_manufactured}','DeviceModelController@byManufactured');
     });
+
     Route::group([
         'prefix' => 'delivery-note'
     ], function ($router){
         Route::get('by-audio-center/{id_audio_center}','DeliveryNoteController@getByAudioCenter');
+        Route::get('by-device/{id_device}','DeliveryNoteController@getByDevice');
     });
+
     Route::group([
         'prefix' => 'device-type'
     ], function ($router){
         Route::get('/','DeviceTypeController@index');
+    });
+
+    Route::group([
+        'prefix' => 'attribut-mcq'
+    ], function ($router){
+        Route::post('new','AttributMcqController@create');
+    });
+
+    Route::group([
+        'prefix' => 'mcq'
+    ], function ($router){
+        Route::get('/','McqController@index');
     });
 });
 

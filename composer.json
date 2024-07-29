@@ -7,11 +7,13 @@
     "require": {
         "php": "^8.1",
         "ext-http": "*",
-        "ext-mysql_xdevapi": "*",
+        "barryvdh/laravel-dompdf": "^2.2",
         "flipbox/lumen-generator": "^9.3",
         "illuminate/mail": "10.0",
         "laravel/lumen-framework": "^10.0",
         "league/flysystem": "2.0",
+        "setasign/fpdi": "^2.6",
+        "tecnickcom/tcpdf": "^6.7",
         "tymon/jwt-auth": "^2.1"
     },
     "require-dev": {
