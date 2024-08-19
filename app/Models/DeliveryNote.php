@@ -21,7 +21,7 @@ class DeliveryNote extends Model
         'number_device',
         'id_audio_center',
         'id_worker',
-
+        'id_device_manufactured',
     ];
 
     public function audioCenter()

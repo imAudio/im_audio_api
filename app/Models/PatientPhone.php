@@ -4,21 +4,22 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class DeviceManufactured extends Model
+class PatientPhone extends Model
 {
+
     /**
      * The table associated with the model.
      *
      * @var string
      */
-    protected $table = 'device_manufactured';
+    protected $table = 'patient_phone';
 
     /**
      * The primary key associated with the table.
      *
      * @var string
      */
-    protected $primaryKey = 'id_device_manufactured';
+    protected $primaryKey = 'id_patient_phone';
 
     /**
      * Indicates if the IDs are auto-incrementing.
@@ -47,10 +48,17 @@ class DeviceManufactured extends Model
      * @var array
      */
     protected $fillable = [
-        'content','address','postal_code','city','id_master_audio'
+        'phone',
+        'id_patient',
     ];
-    public function masterAudio()
+
+
+
+    /**
+     * Get the patient that owns the note.
+     */
+    public function patient()
     {
-        return $this->belongsTo(MasterAudio::class, 'id_master_audio');
+        return $this->belongsTo(Patient::class, 'id_patient');
     }
 }

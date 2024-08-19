@@ -10,8 +10,10 @@ use App\Models\DeviceModelCharacteristic;
 use App\Models\Patient;
 use App\Models\User;
 use App\Services\IdUserService;
+use App\Services\PdfService;
 use App\Services\PermissionService;
 use DateTime;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use App\Models\UserDocument;
 use Illuminate\Support\Facades\Storage;
@@ -25,11 +27,12 @@ class UserDocumentController extends Controller
 {
     protected $permissionService;
     protected $idUserService;
-
-    public function __construct(IdUserService $idUserService, PermissionService $permissionService)
+    protected $pdfService;
+    public function __construct(IdUserService $idUserService, PermissionService $permissionService, PdfService $pdfService)
     {
         $this->idUserService = $idUserService;
         $this->permissionService = $permissionService;
+        $this->pdfService = $pdfService;
     }
 
     public function create(Request $request)
@@ -148,7 +151,9 @@ class UserDocumentController extends Controller
                 $patient = Patient::with(['user'])->find($request->id_user);
                 $company = Company::find(1);
                 $audioCenter = AudioCenter::find(1);
-                $deviceModels = DeviceModel::where('id_device_type', 1)->get();
+                $deviceModels = DeviceModel::where('id_device_type', 5)->get();
+
+
 
                 foreach ($deviceModels as $deviceModel) {
 
@@ -207,7 +212,6 @@ class UserDocumentController extends Controller
             return response()->json(['error' => $exception->getMessage()], 500);
         }
     }
-
 
     public function formatedNumber($number){
         return number_format($number, 2, ',', '');
@@ -382,7 +386,7 @@ class UserDocumentController extends Controller
         $pdf->SetXY(187  , 189.5);
         $pdf->Write(0,$this->formatedNumber($request->social_security_class_1));
 
-        $pdf->SetXY(187  , 194.5);
+        $pdf->SetXY(185  , 194.5);
         $pdf->Write(0,$this->formatedNumber($request->mutual_class_1));
 
         $pdf->SetXY(185  , 199);
@@ -667,6 +671,63 @@ class UserDocumentController extends Controller
         } catch (Exception $exception) {
             return response()->json($exception);
 
+        }
+    }
+
+    public function audiogramCut($id_user)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"]) {
+
+                $audiogram = UserDocument::where("id_user",$id_user)
+                    ->where("type","audiogramme")
+                    ->first();
+
+                if ($audiogram != null) {
+
+                    $userDir = storage_path('app/public/documents/user_' . $audiogram->id_user);
+                    $filePath = storage_path('app/public/' . $audiogram->file_path);
+                    $outputPath = $userDir . '/temp_extracted_section.pdf';
+                    $imageOutputPath = str_replace('.pdf', '.png', $outputPath);
+
+                    if (file_exists($imageOutputPath) && filesize($imageOutputPath) > 0) {
+                        return response()->file($imageOutputPath, [
+                            'Content-Type' => 'image/png',
+                            'Content-Disposition' => 'inline; filename="extracted_section.png"',
+                        ]);
+                    }
+
+                    if (!file_exists($userDir)) {
+                        mkdir($userDir, 0755, true);
+                    }
+
+                    $image = $this->pdfService->extractSection($filePath, $outputPath, 0, 30, 210, 300);
+
+                    if (file_exists($image) && filesize($image) > 0) {
+                        return response()->file($image, [
+                            'Content-Type' => 'image/png',
+                            'Content-Disposition' => 'inline; filename="extracted_section.png"',
+                        ]);
+                    } else {
+                        return response()->json(["message" => "Failed to extract and convert PDF section"], 500);
+                    }
+                } else {
+                    return response()->json(["message" => "Document not found"]);
+                }
+            }
+
+            return response()->json(["status" => "error", "message" => "You do not have the rights"], 401);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json(["status" => "error", "message" => "Document not found"], 404);
+        } catch (Exception $exception) {
+            return response()->json([
+                "status" => "error",
+                "message" => "An error occurred",
+                "error" => $exception->getMessage()
+            ], 500);
         }
     }
 

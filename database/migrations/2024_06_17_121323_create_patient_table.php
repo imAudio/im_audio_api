@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('postal_code')->nullable();
             $table->string('city')->nullable();
             $table->string('social_security_number')->nullable();
-            $table->string('genre')->nullable();
+            $table->string('gender')->nullable();
 
             //$table->unsignedBigInteger('id_worker');
             //$table->foreign('id_worker')->references('id_user')->on('worker');

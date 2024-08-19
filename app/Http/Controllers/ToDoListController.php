@@ -117,6 +117,76 @@ class ToDoListController extends Controller
         }
     }
 
+    public function getByAudioCenterToCalendar(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+            if ($permissions["isWorker"] == true) {
+
+                $idAudioCenter = $request->query('id-audio-center');
+                $start = $request->input('start');
+                $end = $request->input('end');
+
+                // Ajustement de +1 -1 semaine de la plage horaire
+                $start = strtotime(date("Y-m-d", strtotime($start)) . " -1 week");
+                $end = strtotime(date("Y-m-d", strtotime($end)) . " +1 week");
+
+                // Plage horaire mis au bon format
+                $startDate = \Carbon\Carbon::parse($start);
+                $endDate = Carbon::parse($end);
+
+                $toDoLists = ToDoList::where('id_audio_center', $idAudioCenter)
+                    ->where("is_deleted", 0)
+                    ->whereBetween('date', [$startDate, $endDate])
+                    ->get()
+                    ->groupBy(function ($toDoList) {
+                        return $toDoList->date->toDateString();
+                    });
+
+                $data = collect();
+
+                foreach ($toDoLists as $date => $toDos) {
+                    $startTime = \Carbon\Carbon::createFromTime(9, 0, 0); // Commence à 9h00
+                    foreach ($toDos as $toDoList) {
+                        if ($toDoList->category == 1) {
+                            $backgroundColor = "#ffefd5";
+                            $title = "Autre";
+                        } else {
+                            $backgroundColor = "#F70CCC";
+                            $title = "Facturation";
+                        }
+
+                        $data->push([
+                            'id_to_do_list' => $toDoList->id_to_do_list,
+                            'description' => $toDoList->content,
+                            'start' => $toDoList->date->toDateString() . "T" . $startTime->format('H:i:s') . ".000000Z",
+                            'backgroundColor' => $backgroundColor,
+                            'title' => $title,
+                            'user' => $toDoList->user ? [
+                                'id_user' => $toDoList->id_user ?: null,
+                                'firstName' => $toDoList->user->firstname ?: null,
+                                'lastName' => $toDoList->user->lastname ?: null,
+                            ] : null,
+                            'worker' => [
+                                'id_worker' => $toDoList->worker->user->id_user,
+                                'firstName' => $toDoList->worker->user->firstname,
+                                'lastName' => $toDoList->worker->user->lastname,
+                            ],
+                        ]);
+
+                        $startTime->addMinutes(60); // Incrément de 30 minutes
+                    }
+                }
+
+                return response()->json($data);
+            }
+            return response()->json(["message" => "You do not have the rights"], 401);
+        } catch (\Exception $exception) {
+            error_log('Exception during creation: ' . $exception->getMessage());
+            throw $exception;
+        }
+    }
+
     public function show($id)
     {
         //

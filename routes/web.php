@@ -38,7 +38,11 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     $router->get('protected', function () {
         return response()->json(['message' => 'This is a protected route']);
     });
-
+    Route::group([
+        'prefix' => 'audio-center'
+    ], function ($router) {
+        Route::get('get-all', 'AudioCenterController@index');
+    });
     Route::group([
         'prefix' => 'user'
     ], function ($router) {
@@ -46,17 +50,12 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     });
 
     Route::group([
-        'prefix' => 'audio-center'
-    ], function ($router) {
-        Route::get('get-all', 'AudioCenterController@index');
-    });
-
-    Route::group([
         'prefix' => 'patient'
     ], function ($router) {
         Route::get('autocomplete/{query}', 'PatientController@autocomplete');
-        Route::post('new', 'PatientController@create');
         Route::get('{id}','PatientController@show');
+        Route::post('new', 'PatientController@create');
+        Route::put('put-info','PatientController@update');
     });
     $router->get('/version', function () use ($router) {
         return $router->app->version();
@@ -65,8 +64,9 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     Route::group([
         'prefix' => 'to-do-list'
     ], function ($router) {
-        Route::post('new', 'ToDoListController@create');
         Route::get('by-audio-center/{id_audio_center}','ToDoListController@getByAudioCenter');
+        Route::get('to-calendar','ToDoListController@getByAudioCenterToCalendar');
+        Route::post('new', 'ToDoListController@create');
         Route::patch('make/{id_to_do_list}','ToDoListController@make');
         Route::put('put','ToDoListController@update');
     });
@@ -77,21 +77,25 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::post('new', 'PatientNoteController@create');
         Route::get('by-patient/{idPatient}', 'PatientNoteController@getByPatient');
     });
-
+    Route::group([
+        'prefix' => 'patient-phone'
+    ], function ($router) {
+        Route::post('new', 'PatientPhoneController@create');
+        Route::patch('patch', 'PatientPhoneController@edit');
+    });
     Route::group([
         'prefix' => 'user-document'
     ],function ($router){
-
         Route::get('download/{id_document}', 'UserDocumentController@download');
         Route::get('get-by-user/{id_user}','UserDocumentController@getDocumentByUser');
         Route::get('quote/search/{query}/{id_user}','UserDocumentController@searchQuote');
         Route::get('quote/check/{id_user}','UserDocumentController@checkQuote');
         Route::get('quote-affiliate/check/{id_user}','UserDocumentController@checkQuoteAffiliate');
         Route::get('prescription/check/{id_user}','UserDocumentController@checkPrescription');
+        Route::get('audiogram-cut/{id_user}','UserDocumentController@audiogramCut');
         Route::post('quote','UserDocumentController@generateQuote');
         Route::post('upload', 'UserDocumentController@create');
         Route::delete('delete','UserDocumentController@delete');
-
     });
 
     Route::group([
@@ -102,7 +106,9 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::get('history-transfer/{id_device}', 'DeviceController@getHistoryTransfer');
         Route::get('by-state/set-sail/{state}/{idAudioCenter}', 'DeviceController@getSetSailByState');
         Route::get('by-state-audio-center/{state}/{idAudioCenter}', 'DeviceController@getByStateAudioCenter');
+        Route::get('by-model-state-audio-center', 'DeviceController@getByModelStateAudioCenter');
         Route::get('autocomplete/{query}/{id_audio_center}/{type}','DeviceController@autocomplete');
+        Route::get('by-patient','DeviceController@deviceByIdPatient');
         Route::post('new', 'DeviceController@create');
         Route::patch('edit/state', 'DeviceController@editState');
         Route::patch('edit/transfer', 'DeviceController@transfer');
@@ -146,7 +152,10 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         'prefix' => 'device-manufactured'
     ], function ($router){
         Route::get('/','DeviceManufacturedController@index');
+        Route::get('information-storage/{id_audio_center}','DeviceManufacturedController@informationStorage');
+        Route::get('one','DeviceManufacturedController@show');
         Route::post('new','DeviceManufacturedController@create');
+        Route::put('put','DeviceManufacturedController@update');
     });
 
     Route::group([
@@ -154,6 +163,8 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     ], function ($router){
         Route::get('/','DeviceModelController@index');
         Route::get('by-manufactured/{id_manufactured}','DeviceModelController@byManufactured');
+        Route::get('autocomplete/{id_device_manufacturer}/{query}','DeviceModelController@autocompleteByManufacured');
+        Route::get('information-storage','DeviceModelController@informationStorage');
     });
 
     Route::group([

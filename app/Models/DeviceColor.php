@@ -32,7 +32,7 @@ class DeviceColor extends Model
      *
      * @var string
      */
-    protected $keyType = 'bigint';
+    protected $keyType = 'int';
 
     /**
      * Indicates if the model should be timestamped.

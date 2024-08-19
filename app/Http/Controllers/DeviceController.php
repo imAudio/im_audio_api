@@ -7,6 +7,7 @@ use App\Models\DeliveryNoteDevice;
 use App\Models\Device;
 use App\Models\DeviceState;
 use App\Models\DeviceTransfer;
+use App\Models\Patient;
 use App\Models\SetSail;
 use App\Services\IdUserService;
 use App\Services\PermissionService;
@@ -143,6 +144,88 @@ class DeviceController extends Controller
         }
     }
 
+    public function getByModelStateAudioCenter(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+
+                $state = $request->query('state');
+                $idAudioCenter = $request->query('id-audio-center');
+                $idDeviceModel = $request->query('id-device-model');
+
+                // Sous-requête pour les derniers états des appareils
+                $stateSubQuery = DB::table('device_state as ds1')
+                    ->select('ds1.id_device', DB::raw('MAX(ds1.created_at) as latest_created_at'))
+                    ->groupBy('ds1.id_device');
+
+                // Sous-requête pour les derniers transferts des appareils
+                $transferSubQuery = DB::table('device_transfer as dt1')
+                    ->select('dt1.id_device', DB::raw('MAX(dt1.created_at) as latest_created_at'))
+                    ->groupBy('dt1.id_device');
+
+                // Requête principale
+                $devices = Device::leftJoinSub($stateSubQuery, 'latest_state', function ($join) {
+                    $join->on('device.id_device', '=', 'latest_state.id_device');
+                })
+                    ->leftJoin('device_state as ds2', function ($join) use ($state) {
+                        $join->on('device.id_device', '=', 'ds2.id_device')
+                            ->on('ds2.created_at', '=', 'latest_state.latest_created_at')
+                            ->where('ds2.state', '=', $state);
+                    })
+                    ->leftJoinSub($transferSubQuery, 'latest_transfer', function ($join) {
+                        $join->on('device.id_device', '=', 'latest_transfer.id_device');
+                    })
+                    ->leftJoin('device_transfer as dt2', function ($join) use ($idAudioCenter) {
+                        $join->on('device.id_device', '=', 'dt2.id_device')
+                            ->on('dt2.created_at', '=', 'latest_transfer.latest_created_at')
+                            ->where('dt2.id_audio_center', '=', $idAudioCenter);
+                    })
+                    ->leftJoin('device_model', 'device.id_device_model', '=', 'device_model.id_device_model')
+                    ->where('device.id_device_model', '=', $idDeviceModel)
+                    ->whereNotNull('ds2.id_device')
+                    ->whereNotNull('dt2.id_device')
+                    ->with(['deviceState', 'deviceTransfer'])
+                    ->select('device.*', 'ds2.state as latest_state', 'ds2.created_at as latest_state_created_at', 'dt2.id_audio_center as latest_transfer_audio_center', 'dt2.created_at as latest_transfer_created_at')
+                    ->orderBy('ds2.created_at', 'desc')
+                    ->get();
+
+                $data = $devices->map(function ($device) {
+                    return [
+                        "id_device" => $device->id_device,
+                        "serial_number" => $device->serial_number,
+                        "state" => $device->deviceState->first()->state,
+                        "date_state" => $device->deviceState->first()->created_at->toDateString(),
+                        "model" => [
+                            "id_device_model" => $device->deviceModel->id_device_model,
+                            "content" => $device->deviceModel->content,
+                        ],
+                        "type" => [
+                            "id_device_type" => $device->deviceModel->deviceType->id_device_type,
+                            "content" => $device->deviceModel->deviceType->content,
+                        ],
+                        "manufactured" => [
+                            "id_device_manufactured" => $device->deviceModel->deviceManufactured->id_device_manufactured,
+                            "content" => $device->deviceModel->deviceManufactured->content,
+                        ],
+
+                    ];
+                });
+
+                return response()->json($data);
+
+            }
+
+            return response()->json(["message" => "You do not have the rights"], 401);
+
+        } catch (\Exception $exception) {
+            Log::error('Error in getByStateAudioCenter:', ['exception' => $exception]);
+            return response()->json(["error" => $exception->getMessage()], 500);
+        }
+    }
+
+
 
     public function create(Request $request)
     {
@@ -160,6 +243,7 @@ class DeviceController extends Controller
                     "number_device" => $request->number_device,
                     "id_audio_center" => $request->id_audio_center,
                     "id_worker" => $id_worker,
+                    "id_device_manufactured" => $request->id_device_manufactured,
                 ]);
 
                 foreach ($devices as $device) {
@@ -184,7 +268,7 @@ class DeviceController extends Controller
                     DeliveryNoteDevice::create([
                         "id_delivery_note" => $deliveryNote->id_delivery_note,
                         "id_device" => $createdDevice->id_device,
-                        "id_worker" => $id_worker
+                        "id_worker" => $id_worker,
                     ]);
                 }
 
@@ -518,7 +602,7 @@ class DeviceController extends Controller
                 ]);
 
                 $devices = $devicesQuery->get();
-         
+
 
                 $formattedDevices = $devices->map(function ($device) {
                     return [
@@ -535,5 +619,81 @@ class DeviceController extends Controller
         } catch (Exception $exception) {
             return response()->json($exception);
         }
+    }
+
+    public function deviceByIdPatient(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+                $devicePatient = Patient::with('setSail.device.deviceModel.deviceManufactured', 'setSail.device.deviceColor')->find($request->query('id-patient'));
+
+                if (!$devicePatient) {
+                    return response()->json(["error" => "Patient not found"], 404);
+                }
+
+                $deviceData = $this->processDeviceInfo($devicePatient->setSail);
+
+                return response()->json($deviceData);
+
+                return response()->json();
+            } else {
+                return response()->json(["message" => "You do not have the rights"], 401);
+            }
+        }catch (Exception $exception) {
+            return response()->json($exception);
+        }
+    }
+
+    public function processDeviceInfo($devices)
+    {
+        $leftDevice = [];
+        $rightDevice = [];
+        $otherDevice = [];
+
+        foreach ($devices as $device) {
+            $newDevice = [
+                'sizeEarpiece' => $device->size_earpiece,
+                'side' => $device->side,
+                'worker' => [
+                    'firstName' => $device->worker !== null ? $device->worker->firstname : null,
+                    'lastName' => $device->worker !== null ? $device->worker->lastname : null,
+                ],
+                'dome' => [
+                    'size' => $device->dome !== null ? $device->dome->size : null,
+                    'state' => $device->dome !== null ? $device->dome->state : null,
+                ],
+                'device' => [
+                    'id_device' => $device->device->id_device,
+                    'serialNumber' => $device->device !== null ? $device->device->serial_number : null,
+                    'state' => $this->getStateDevice($device->device->id_device),
+                ],
+                'model' => [
+                    'type' => $device->device->deviceModel->deviceType->content,
+                    'content' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->content : null,
+                    'state' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->energy : null,
+                    'batteryType' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->battery_type : null,
+                    'batteryTypeBackgroundColor' => $device->device !== null && $device->device->deviceModel !== null ? $device->device->deviceModel->battery_type_background_color : null,
+                ],
+                'info_model' => [
+                    'manufactured' => $device->device->deviceModel->deviceManufactured->content,
+                    'color' => $device->device->deviceColor->content,
+                ],
+                'created_at' => $device->created_at
+            ];
+            if ($device->side == "left") {
+                $leftDevice[] = $newDevice;
+            } else if ($device->side == "right") {
+                $rightDevice[] = $newDevice;
+            } else {
+                $otherDevice[] = $newDevice;
+            }
+        }
+        return [
+            "left" => $leftDevice,
+            "right" => $rightDevice,
+            "other" => $otherDevice,
+        ];
     }
 }

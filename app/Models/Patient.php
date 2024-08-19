@@ -22,7 +22,7 @@ class Patient extends Model
         'postal_code',
         'city',
         'social_security_number',
-        'sex',
+        'gender',
         'id_worker',
         'id_audio_center',
     ];
@@ -41,6 +41,10 @@ class Patient extends Model
     {
         return $this->hasMany(PatientNote::class, 'id_patient');
     }
+    public function patientPhone()
+    {
+        return $this->hasMany(PatientPhone::class, 'id_patient');
+    }
     public function setSail()
     {
         return $this->hasMany(SetSail::class, 'id_patient');
@@ -49,4 +53,6 @@ class Patient extends Model
     {
         return $this->hasMany(AttributMcq::class, 'id_patient');
     }
+
+
 }

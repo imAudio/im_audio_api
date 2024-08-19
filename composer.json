@@ -7,12 +7,15 @@
     "require": {
         "php": "^8.1",
         "ext-http": "*",
+        "ext-imagick": "*",
         "barryvdh/laravel-dompdf": "^2.2",
         "flipbox/lumen-generator": "^9.3",
         "illuminate/mail": "10.0",
         "laravel/lumen-framework": "^10.0",
         "league/flysystem": "2.0",
+        "setasign/fpdf": "^1.8",
         "setasign/fpdi": "^2.6",
+        "spatie/pdf-to-image": "^3.0",
         "tecnickcom/tcpdf": "^6.7",
         "tymon/jwt-auth": "^2.1"
     },

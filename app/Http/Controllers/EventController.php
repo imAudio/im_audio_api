@@ -154,8 +154,9 @@ class EventController extends Controller
 
         }
     }
-    public function getByAudioCenterAndDate (Request $request,$id_audio_center)
+    public function getByAudioCenterAndDate(Request $request,$id_audio_center)
     {
+        
         try {
             $permissions = $this->permissionService->getPermissions();
             if ($permissions["isWorker"] == true) {
@@ -191,7 +192,7 @@ class EventController extends Controller
                         ] ?? null
                     ];
                 });
-             
+
                 return response()->json($data);
             }
             return response()->json(["message" => "You do not have the rights"],401);
