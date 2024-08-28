@@ -11,7 +11,7 @@ class DeviceState extends Model
     public $timestamps = true;
 
     protected $fillable = [
-        'id_device','state','id_worker'
+        'id_device','state','id_worker','information'
     ];
 
     public function device()

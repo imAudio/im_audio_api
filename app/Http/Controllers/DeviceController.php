@@ -225,8 +225,6 @@ class DeviceController extends Controller
         }
     }
 
-
-
     public function create(Request $request)
     {
         try {
@@ -338,7 +336,6 @@ class DeviceController extends Controller
         }
     }
 
-
     public function show($id_device)
     {
         try {
@@ -418,6 +415,7 @@ class DeviceController extends Controller
             return response()->json(["message" => $exception->getMessage()], 500);
         }
     }
+
     public function getStateDevice($id_device)
     {
         $stateSubQuery = DB::table('device_state as ds1')
@@ -695,5 +693,42 @@ class DeviceController extends Controller
             "right" => $rightDevice,
             "other" => $otherDevice,
         ];
+    }
+
+    public function patchSerialNumberSav(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
+
+            if ($permissions["isWorker"] == true) {
+
+
+                $device = Device::find($request->id_device);
+                if(!$device){
+                    return response()->json(["message" => "Device not found"],404);
+                }
+
+                $device->serial_number = $request->serial_number;
+                $device->save();
+
+                $deviceState = DeviceState::where('id_device',$request->id_device)->get();
+
+                $state = $deviceState[count($deviceState)-2]->state;
+
+                $newDeviceState = DeviceState::create([
+                    "id_device" => $request->id_device,
+                    "state" => $state,
+                    "id_worker" => $this->idUserService->getAuthenticatedIdUser()['id_user'],
+                    "information"=>$request->information,
+                ]);
+
+
+                return response()->json($device);
+            } else {
+                return response()->json(["message" => "You do not have the rights"], 401);
+            }
+        }catch (Exception $exception) {
+            return response()->json($exception);
+        }
     }
 }
