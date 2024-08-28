@@ -56,6 +56,8 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::get('{id}','PatientController@show');
         Route::post('new', 'PatientController@create');
         Route::put('put-info','PatientController@update');
+        Route::patch('edit','PatientController@edit');
+       // Route::get('route-test', 'PatientController@routeTest');
     });
     $router->get('/version', function () use ($router) {
         return $router->app->version();
@@ -112,6 +114,7 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::post('new', 'DeviceController@create');
         Route::patch('edit/state', 'DeviceController@editState');
         Route::patch('edit/transfer', 'DeviceController@transfer');
+        Route::patch('edit/serial-number-sav','DeviceController@patchSerialNumberSav');
         Route::put('put','DeviceController@update');
     });
 
@@ -190,6 +193,38 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         'prefix' => 'mcq'
     ], function ($router){
         Route::get('/','McqController@index');
+    });
+
+    Route::group([
+       'prefix' => 'doctor'
+    ], function ($router){
+        Route::post('autocomplete','DoctorController@autocomplete');
+        Route::post('new','DoctorController@create');
+        Route::put('put','DoctorController@update');
+        Route::delete('delete','DoctorController@destroy');
+    });
+
+    Route::group([
+        'prefix' => 'patient-doctor'
+    ], function ($router){
+        Route::post('new','PatientDoctorController@create');
+        Route::put('put','PatientDoctorController@update');
+        Route::delete('delete','PatientDoctorController@destroy');
+    });
+
+    Route::group([
+        'prefix' => 'patient-doctor'
+    ], function ($router){
+        Route::post('new','PatientDoctorController@create');
+        Route::put('put','PatientDoctorController@update');
+        Route::delete('delete','PatientDoctorController@destroy');
+    });
+
+    Route::group([
+        'prefix' => 'patient-social-security'
+    ], function ($router){
+        Route::get('show-by-patient/{id_patient}','PatientSocialSecurityController@showByPatient');
+        Route::put('edit','PatientSocialSecurityController@update');
     });
 });
 

@@ -21,7 +21,6 @@ return new class extends Migration
             $table->string('address')->nullable();
             $table->string('postal_code')->nullable();
             $table->string('city')->nullable();
-            $table->string('social_security_number')->nullable();
             $table->string('gender')->nullable();
 
             //$table->unsignedBigInteger('id_worker');

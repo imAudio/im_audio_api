@@ -192,8 +192,6 @@ class ToDoListController extends Controller
         //
     }
 
-
-
     public function update(Request $request)
     {
         try {

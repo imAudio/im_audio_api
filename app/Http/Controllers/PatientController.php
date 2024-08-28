@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Patient;
 use App\Models\PatientPhone;
+use App\Models\PatientSocialSecurity;
 use App\Models\User;
 use App\Services\IdUserService;
 use App\Http\Controllers\DeviceController;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use mysql_xdevapi\Exception;
 use function Laravel\Prompts\error;
+use function PHPUnit\Framework\isEmpty;
 
 
 class PatientController extends Controller
@@ -29,9 +31,9 @@ class PatientController extends Controller
 
     public function create(Request $request)
     {
-
         try {
             $permissions = $this->permissionService->getPermissions();
+
             if($permissions["isWorker"] == true){
 
                 $this->validate($request, [
@@ -45,8 +47,7 @@ class PatientController extends Controller
                     'email' => $request->email,
                     'password' => Hash::make(generateRandomPassword()),
                     'id_worker' => $this->idUserService->getAuthenticatedIdUser()['id_user'],
-                    ]);
-
+                ]);
 
                 $patient = Patient::create([
                     'id_user' => $user->id_user,
@@ -54,7 +55,6 @@ class PatientController extends Controller
                     'city' => $request->city,
                     'postal_code' => $request->postalCode,
                     'id_audio_center' => $request->audioCenter,
-                    'social_security_number' => $request->socialSecurity,
                     'date_birth' => $request->date,
                 ]);
 
@@ -65,12 +65,17 @@ class PatientController extends Controller
                     ]);
                 }
 
+                //PatientSocialSecurity::create([
+                //    'id_patient' => $user->id_user,
+                //    'social_security_number' => $request->social_security_number,
+                //]);
+
                 $data = [
                     "label" => $user->firstname . ' ' .   $user->lastname,
 		            "value" => $user->id_user
                 ];
 
-                return response()->json(["message" =>   "Patien create","id_user" => $user->id_user,"data" => $data],201);
+                return response()->json(["message" => "Patien create","id_user" => $user->id_user,"data" => $data],201);
             }else{
                 return response()->json(["message" => "You do not have the rights"],401);
             }
@@ -104,6 +109,8 @@ class PatientController extends Controller
                     },
                     'attributMcq.mcq',
                     'attributMcq.worker',
+                    'patientDoctor',
+                    'patientSocialSecurity'
 
                 ])->find($id);
 
@@ -149,6 +156,7 @@ class PatientController extends Controller
                 $futureEvent = [];
 
                 $dataEvent = $patientData->event->map(function ($event) use (&$pastEvent, &$futureEvent) {
+                    $creat = $event->created_at->format('d/m/Y');
                     $e = [
                         'id_event' => $event->id_event,
                         'start' => $event->start,
@@ -158,6 +166,12 @@ class PatientController extends Controller
                         'eventType' => [
                             'content' => $event->eventType->content,
                             'background_color' => $event->eventType->background_color,
+                        ],
+                        'creat' => $creat,
+                        'worker' => [
+                            'id_worker' =>  $event->worker->id_user,
+                            'firstName' => $event->worker->user->firstname,
+                            'lastName' => $event->worker->user->lastname,
                         ]
                     ];
 
@@ -169,10 +183,16 @@ class PatientController extends Controller
                     }
                 });
 
+                $pastEvent = collect($pastEvent)->sortByDesc('start')->values()->all();
+
+                $futureEvent = collect($futureEvent)->sortByDesc('start')->values()->all();
+
                 $event = [
                     'past_events' => $pastEvent,
                     'future_events' => $futureEvent,
                 ];
+
+
 
                 $note = $patientData->patientNote->map(function ($note) {
                     $creat = $note->created_at->format('d/m/Y');
@@ -210,6 +230,39 @@ class PatientController extends Controller
                     ];
                 });
 
+                if (!empty($patientData->patientDoctor[0])){
+                    $doctor =$patientData->patientDoctor[0] ;
+
+                    $creat = $doctor->created_at->format('d/m/Y');
+                    $prescription = [
+                        'id_patient_doctor' => $doctor->id_patient_doctor,
+                        'creat' => $creat,
+                        'date_prescription' => $doctor->date_prescription,
+                        'doctor' => [
+                            'id_doctor' => $doctor->id_doctor,
+                            'name' => $doctor->doctor->name,
+                            'finess' => $doctor->doctor->finess,
+                            'rpps' => $doctor->doctor->rpps,
+                            'type' => $doctor->doctor->type,
+                        ]
+                    ];
+                }else{
+                    $prescription=[];
+                }
+                if (!empty($patientData->patientSocialSecurity[0])){
+                    $social =$patientData->patientSocialSecurity[0] ;
+
+                    $socialSecurity = [
+                        'social_security_number' => $social->social_security_number,
+                        'date_open' => $social->date_open,
+                        'date_close' => $social->date_close,
+                        'situation' => $social->situation,
+                        'special_situation' => $social->special_situation,
+                        'cash_register_code' => $social->cash_register_code,
+                    ];
+                }else{
+                    $socialSecurity=[];
+                }
 
                 $result = [
                     'patient' => $patient,
@@ -218,6 +271,8 @@ class PatientController extends Controller
                     'note' => $note,
                     'device' => $device,
                     'mcq' => $mcq,
+                    'prescription' => $prescription,
+                    'social_security' => $socialSecurity
                 ];
 
                 return response()->json($result);
@@ -332,7 +387,47 @@ class PatientController extends Controller
         }
     }
 
+    public function edit(Request $request)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissions();
 
+            if ($permissions["isWorker"] == true) {
+                $patient = Patient::find($request->id_patient);
+                $label = $request->input('label');
+                $patient->$label = $request->value;
+                $patient->save();
+            } else {
+                return response()->json(["message" => "You do not have the rights"], 401);
+            }
+
+            return response()->json(["social_security_number" =>$patient->social_security_number]);
+        } catch (Exception $exception) {
+            return response()->json($exception);
+        }
+    }
+
+    public function routeTest()
+    {
+        try {
+            $permission = $this->permissionService->getPermissions();
+
+            if ($permission["isWorker"] == true){
+
+                    $patient = Patient::with([
+                        'user'
+                    ])
+                    ->find(69);
+
+                return response()->json($patient);
+            }else{
+                return response()->json(["message" => "You do not have the rights"], 401);
+            }
+
+        }catch (Exception $exception){
+            return response()->json($exception);
+        }
+    }
 
 }
 function generateRandomPassword($length = 8) {

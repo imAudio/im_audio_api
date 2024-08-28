@@ -45,16 +45,9 @@ class UserDocumentController extends Controller
                 ]);
 
                 if ($file = $request->file('document')) {
-                    $path = $file->store('documents/user_' . $request->id_user, 'public');
+                    //$path = $file->store('documents/user_' . $request->id_user, 'public');
 
-                    $document = new UserDocument();
-                    $document->id_user = $request->id_user;
-                    $document->type = $request->type;
-                    $document->file_name = $file->getClientOriginalName();
-                    $document->file_path = $path;
-                    $document->file_type = $file->getClientMimeType();
-                    $document->id_worker = $this->idUserService->getAuthenticatedIdUser()['id_user'];
-                    $document->save();
+                    $document = $this->uploadDocument($file, $request->id_user, $request->type);
 
                     return response()->json(['message' => 'Document uploaded successfully', 'document' => $document], 201);
                 }
@@ -64,6 +57,25 @@ class UserDocumentController extends Controller
             return response()->json(["message" => "You do not have the rights"], 401);
         } catch (\Exception $exception) {
             return response()->json($exception);
+        }
+    }
+
+    public function uploadDocument($file,$id_user,$type)
+    {
+        try {
+            $path = $file->store('documents/user_' . $id_user, 'public');
+            $document = new UserDocument();
+            $document->id_user = $id_user;
+            $document->type = $type;
+            $document->file_name = $file->getClientOriginalName();
+            $document->file_path = $path;
+            $document->file_type = $file->getClientMimeType();
+            $document->id_worker = $this->idUserService->getAuthenticatedIdUser()['id_user'];
+            $document->save();
+
+            return $document;
+        }catch (\Exception $exception) {
+            return $exception;
         }
     }
 

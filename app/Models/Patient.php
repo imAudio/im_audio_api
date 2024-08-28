@@ -53,6 +53,12 @@ class Patient extends Model
     {
         return $this->hasMany(AttributMcq::class, 'id_patient');
     }
-
-
+    public function patientDoctor()
+    {
+        return $this->hasMany(PatientDoctor::class, 'id_user');
+    }
+    public function patientSocialSecurity()
+    {
+        return $this->hasMany(PatientSocialSecurity::class, 'id_patient');
+    }
 }
