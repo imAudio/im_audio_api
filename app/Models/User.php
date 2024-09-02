@@ -64,4 +64,8 @@ class User extends Model implements AuthenticatableContract, JWTSubject
         return $this->belongsTo(User::class, 'id_worker');
     }
 
+    public function workerSkill()
+    {
+        return $this->hasMany(WorkerSkill::class,'id_worker');
+    }
 }

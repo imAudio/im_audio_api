@@ -79,7 +79,7 @@ class UserDocumentController extends Controller
         }
     }
 
-    public function download($id_document)
+    public function download($id_document) // mettre une vérification du rôle
     {
         $document = UserDocument::findOrFail($id_document);
         $filePath = storage_path('app/public/' . $document->file_path);
@@ -164,8 +164,6 @@ class UserDocumentController extends Controller
                 $company = Company::find(1);
                 $audioCenter = AudioCenter::find(1);
                 $deviceModels = DeviceModel::where('id_device_type', 5)->get();
-
-
 
                 foreach ($deviceModels as $deviceModel) {
 

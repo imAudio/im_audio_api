@@ -50,6 +50,12 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     });
 
     Route::group([
+        'prefix' => 'worker'
+    ], function ($router) {
+       Route::get('by-master-audio','WorkerController@byMasterAudio');
+    });
+
+    Route::group([
         'prefix' => 'patient'
     ], function ($router) {
         Route::get('autocomplete/{query}', 'PatientController@autocomplete');
@@ -57,7 +63,7 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
         Route::post('new', 'PatientController@create');
         Route::put('put-info','PatientController@update');
         Route::patch('edit','PatientController@edit');
-       // Route::get('route-test', 'PatientController@routeTest');
+        //Route::get('route-test', 'PatientController@routeTest');
     });
     $router->get('/version', function () use ($router) {
         return $router->app->version();
@@ -225,6 +231,36 @@ $router->group(['middleware' => 'auth.jwt'], function () use ($router) {
     ], function ($router){
         Route::get('show-by-patient/{id_patient}','PatientSocialSecurityController@showByPatient');
         Route::put('edit','PatientSocialSecurityController@update');
+    });
+
+    Route::group([
+        'prefix' => 'skill'
+    ],function ($router){
+       Route::get('/','SkillController@index');
+       Route::get("{id_skill}",'SkillController@show');
+       Route::post('new','SkillController@create');
+       Route::put('put','SkillController@update');
+       Route::delete('delete','SkillController@destroy');
+    });
+    Route::group([
+        'prefix' => 'worker-skill'
+    ],function ($router) {
+        Route::get('/', 'WorkerSkillController@index');
+        Route::get("{id_worker}", 'WorkerSkillController@show');
+        Route::get('sort/{id_worker}','WorkerSkillController@skillSort');
+        Route::post('new', 'WorkerSkillController@create');
+        //Route::put('put', 'WorkerSkillController@update');
+        Route::delete('delete', 'WorkerSkillController@destroy');
+    });
+    Route::group([
+        'prefix' => 'presence'
+    ],function ($router) {
+        Route::get('/', 'PresenceController@index');
+        Route::get("{id_audio_center}", 'PresenceController@show');
+        Route::get('sort/{id_worker}','PresenceController@skillSort');
+        Route::post('new', 'PresenceController@create');
+        //Route::put('put', 'WorkerSkillController@update');
+        Route::delete('delete', 'PresenceController@destroy');
     });
 });
 

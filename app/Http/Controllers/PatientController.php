@@ -415,9 +415,9 @@ class PatientController extends Controller
             if ($permission["isWorker"] == true){
 
                     $patient = Patient::with([
-                        'user'
+                        'user',
                     ])
-                    ->find(69);
+                    ->find(56);
 
                 return response()->json($patient);
             }else{
